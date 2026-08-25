@@ -1,0 +1,85 @@
+# delivery-eta-mesh
+
+An event-driven ETA recomputation mesh for food delivery dispatch — a Spring Boot scoring worker on Fargate, with late-event handling and Spark skew handling for hot restaurants.
+
+## Pitch Card
+
+**Problem** — Food delivery dispatch degrades when courier GPS events arrive late or out of order; stale ETAs cause bad courier assignments, late orders, and refund costs.
+
+**Solution** — An event-driven ETA mesh: a Spring Boot scoring worker on Fargate consuming SQS, watermark-based handling of late GPS events, and Spark key-salting for the small set of restaurants that generate most of the traffic.
+
+**Impact** — Worker verified end-to-end against real SQS + DynamoDB (5 orders sent → 5 scored; a redelivered order_id overwrites instead of duplicating). Partition imbalance from the top-5%-of-restaurants skew (measured at 59.5% of all orders) reduced from **11.5x max/min partition size to 1.7x** after salting the shuffle key.
+
+**Stack** — Python 3 · PySpark · FastAPI · Java 17 / Spring Boot 4.1 · AWS (SNS, SQS, ECS/Fargate, EC2, DynamoDB, S3) via MiniStack
+
+---
+
+## Architecture
+
+```
+courier GPS simulator (EC2, long-running daemon) + order events
+  → SNS `dispatch-events` → SQS (scoring queue + DLQ)
+  → Spring Boot worker on Fargate: consume batch → compute ETA → DynamoDB (current ETA)
+  → all raw events → S3 (partitioned)
+  → nightly PySpark: replay full day, handle late arrivals via watermark, salt hot restaurant keys
+  → aggregates → Redshift (ETA accuracy by zone/hour)
+  → FastAPI: /eta/{order_id} live, /accuracy/daily
+```
+
+See `docs/architecture.md` for the diagram.
+
+## Why Java/Spring Boot here
+
+The scoring worker is a stateless, high-throughput SQS consumer where a warm JVM on Fargate outperforms Python cold starts, and Spring Boot provides SQS polling, health checks, and metrics without custom plumbing.
+
+**Honesty note:** Java/Spring Boot is used as a bounded scoring worker — not evidence of Java platform seniority. The Python/PySpark/FastAPI layers remain the production-grade core.
+
+## Measured in this repo
+
+| Metric | Value | How it's measured |
+|---|---|---|
+| Skew concentration (top 5% of restaurants) | **59.5%** of all orders, on a 24h/100-restaurant/9,600-event synthetic run | `python3 src/data_gen.py` |
+| Partition imbalance, naive shuffle by `restaurant_id` | **11.52x** (max 1,440 rows vs. min 125 rows per partition) | `python3 src/replay.py` |
+| Partition imbalance, salted shuffle by `(restaurant_id, salt)` | **1.7x** (max 839 vs. min 494) | `python3 src/replay.py` |
+| Late GPS pings watermarked (not merged into live state) | 545 of 4,800 GPS events (11.4%) | `python3 src/replay.py` |
+| Worker end-to-end: orders sent → rows scored in DynamoDB | **5/5**, real SQS → real Spring Boot worker → real DynamoDB | manual verification, see BUILD_GUIDE step 3 |
+| Redelivery of the same `order_id` | **1 row**, not a duplicate — later message's ETA wins | manual verification |
+
+> These numbers are honest about scale: on a single-machine `local[2]` Spark session, wall-clock speedup from salting isn't a reliable signal (no real cluster for a hot partition to bottleneck), so partition *balance* — the actual mechanism salting fixes — is what's reported instead of a timing number that would be noise at this scale.
+
+## Modeled business impact (synthetic data — assumptions documented)
+
+| Assumption | Source | Modeled outcome |
+|---|---|---|
+| Refund/support cost per late-order incident, incidents avoided by improved ETA MAE | TODO — cite in `docs/impact-model.md` | TODO |
+
+## Emulated vs. real
+
+| Component | Dev (this repo) | Production would use | Fidelity |
+|---|---|---|---|
+| S3 / SNS / SQS / DynamoDB | [MiniStack](https://ministack.org) (free, MIT, no account) | AWS | High |
+| ECS / Fargate | MiniStack ECS — **launches the Spring Boot worker as a real Docker container from the actual task definition** | AWS Fargate | Medium-High — same task def, no real autoscaling |
+| EC2 | MiniStack EC2 (API only) + simulator daemon as a compose service | EC2 | Low — API only; user-data script shipped for reference |
+| Redshift | **DuckDB**, reading aggregate Parquet directly from S3 | Redshift Serverless | Medium — no MPP distribution; real DDL in `sql/redshift/` |
+
+## Three non-tutorial challenges
+
+1. **Late, out-of-order GPS events** — watermarking plus an explicit policy: rewrite historical ETA or just flag it as stale?
+2. **Spark skew** — the top 5% of restaurants generate ~60% of events; key-salting with a measured before/after speedup.
+3. **Real cost comparison** — the same workload on Fargate vs. Lambda, with a $/million-events table and the volume at which the cost curve crosses.
+
+## Demo (3 minutes)
+
+```bash
+make demo   # replay a synthetic dispatch day
+pytest tests/test_worker_idempotency.py   # worker correctness under SQS redelivery
+make query   # daily ETA accuracy by zone
+```
+
+## What this is NOT
+
+Not an "Uber ETA clone" tutorial. What sets it apart: late-event handling, measured skew mitigation, and an explicit cost comparison — not just a happy-path prediction demo.
+
+## Build it yourself
+
+See [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md).
