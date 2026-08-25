@@ -44,12 +44,24 @@ def main() -> None:
                 restaurant_order_counts[restaurant_id] += 1
                 order_id = str(uuid.uuid4())
                 order_ts = start + timedelta(hours=hour, minutes=rng.randint(0, 59))
+                distance_km = round(rng.uniform(1.0, 12.0), 2)
+
+                # Ground truth actual delivery time, for measuring the
+                # worker's ETA MAE against — deliberately uses a different
+                # (noisier, traffic-varying) speed than the worker's fixed
+                # 22 km/h heuristic, so MAE is a real, non-zero number
+                # reflecting the heuristic's real-world error, not a tautology.
+                actual_speed_kmh = max(8.0, rng.gauss(20.0, 5.0))
+                actual_prep_min = max(5.0, rng.gauss(12.0, 3.0))
+                actual_delivery_minutes = round(actual_prep_min + (distance_km / actual_speed_kmh) * 60, 1)
 
                 # order_placed event
                 f.write(json.dumps({
                     "event_type": "order_placed",
                     "order_id": order_id,
                     "restaurant_id": restaurant_id,
+                    "distance_km": distance_km,
+                    "actual_delivery_minutes": actual_delivery_minutes,
                     "ts": order_ts.isoformat(),
                     "event_ts": order_ts.isoformat(),
                 }) + "\n")

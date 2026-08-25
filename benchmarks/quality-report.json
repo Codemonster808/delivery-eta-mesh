@@ -1,0 +1,62 @@
+{
+  "pipeline": "delivery-eta-mesh",
+  "generated_at": "2026-08-25T16:31:15.439002+00:00",
+  "score": {
+    "completeness": 1.0,
+    "correctness": 1.0,
+    "consistency": 1.0,
+    "validity": 1.0,
+    "timeliness": 1.0,
+    "overall": 1.0
+  },
+  "checks": [
+    {
+      "dimension": "completeness",
+      "name": "every_published_order_gets_scored",
+      "measured": 100,
+      "threshold": 100,
+      "passed": true,
+      "detail": "100/100 orders have an eta-current row"
+    },
+    {
+      "dimension": "correctness",
+      "name": "eta_mae_within_bound",
+      "measured": 5.0,
+      "threshold": 12.0,
+      "passed": true,
+      "detail": "MAE 5.0 min against synthetic ground truth"
+    },
+    {
+      "dimension": "consistency",
+      "name": "redelivery_does_not_duplicate",
+      "measured": 1,
+      "threshold": 1,
+      "passed": true,
+      "detail": "resending an already-scored order must overwrite, not add a row"
+    },
+    {
+      "dimension": "validity",
+      "name": "salting_reduces_partition_imbalance",
+      "measured": 9.67,
+      "threshold": 77.0,
+      "passed": true,
+      "detail": "naive imbalance=77.0, salted imbalance=9.67"
+    },
+    {
+      "dimension": "timeliness",
+      "name": "worker_scores_orders_promptly",
+      "measured": 5.0,
+      "threshold": 20.0,
+      "passed": true,
+      "detail": "100 orders scored"
+    },
+    {
+      "dimension": "timeliness",
+      "name": "replay_job_under_sla",
+      "measured": 31.3,
+      "threshold": 180.0,
+      "passed": true,
+      "detail": "PySpark watermark + salting job wall time"
+    }
+  ]
+}

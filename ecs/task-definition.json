@@ -1,0 +1,15 @@
+{
+  "family": "eta-scoring-worker",
+  "containerDefinitions": [
+    {
+      "name": "eta-worker",
+      "image": "eta-worker:latest",
+      "memory": 512,
+      "essential": true,
+      "environment": [
+        {"name": "AWS_ENDPOINT_URL", "value": "http://ministack:4566"},
+        {"name": "AWS_REGION", "value": "us-east-1"}
+      ]
+    }
+  ]
+}

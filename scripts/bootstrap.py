@@ -55,6 +55,16 @@ def ensure_table(dynamodb, table_name: str, key_name: str) -> None:
     print(f"  created table: {table_name}")
 
 
+def ensure_subscription(sns, sqs, topic_arn: str, queue_url: str) -> None:
+    queue_arn = sqs.get_queue_attributes(QueueUrl=queue_url, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
+    existing = sns.list_subscriptions_by_topic(TopicArn=topic_arn)["Subscriptions"]
+    if any(s["Endpoint"] == queue_arn for s in existing):
+        print(f"  subscription already exists: {queue_arn}")
+        return
+    sns.subscribe(TopicArn=topic_arn, Protocol="sqs", Endpoint=queue_arn, Attributes={"RawMessageDelivery": "true"})
+    print(f"  subscribed {queue_arn} -> {topic_arn}")
+
+
 def main() -> None:
     print("S3 buckets:")
     s3 = aws.client("s3")
@@ -64,12 +74,13 @@ def main() -> None:
     print("SQS queues:")
     sqs = aws.client("sqs")
     ensure_queue(sqs, DLQ_NAME)
-    ensure_queue(sqs, QUEUE_NAME, redrive_to=DLQ_NAME)
+    scoring_queue_url = ensure_queue(sqs, QUEUE_NAME, redrive_to=DLQ_NAME)
 
-    print("SNS topic:")
+    print("SNS topic + subscription:")
     sns = aws.client("sns")
     arn = sns.create_topic(Name="dispatch-events")["TopicArn"]
     print(f"  topic ready: {arn}")
+    ensure_subscription(sns, sqs, arn, scoring_queue_url)
 
     print("DynamoDB table:")
     ensure_table(aws.client("dynamodb"), ETA_TABLE, "order_id")
