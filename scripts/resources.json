@@ -1,0 +1,7 @@
+{
+  "buckets": ["dispatch-raw", "dispatch-agg"],
+  "queues": ["eta-scoring-queue", "eta-scoring-dlq"],
+  "tables": ["eta-current"],
+  "topics": ["dispatch-events"],
+  "clusters": ["eta-cluster"]
+}

@@ -58,6 +58,7 @@ The scoring worker is a stateless, high-throughput SQS consumer where a warm JVM
 | Component | Dev (this repo) | Production would use | Fidelity |
 |---|---|---|---|
 | S3 / SNS / SQS / DynamoDB | [MiniStack](https://ministack.org) (free, MIT, no account) | AWS | High |
+| AWS CLI v2 | Real `aws` CLI against MiniStack (`AWS_ENDPOINT_URL`) — see `docs/RUNBOOK.md` §2. Note: this repo doesn't use Lambda or Step Functions, unlike the other 4 | AWS CLI v2 | High |
 | ECS / Fargate | MiniStack ECS — **launches the Spring Boot worker as a real Docker container from the actual task definition** | AWS Fargate | Medium-High — same task def, no real autoscaling |
 | EC2 | MiniStack EC2 (API only) + simulator daemon as a compose service | EC2 | Low — API only; user-data script shipped for reference |
 | Redshift | **DuckDB**, reading aggregate Parquet directly from S3 | Redshift Serverless | Medium — no MPP distribution; real DDL in `sql/redshift/` |
@@ -71,9 +72,11 @@ The scoring worker is a stateless, high-throughput SQS consumer where a warm JVM
 ## Demo (3 minutes)
 
 ```bash
-make demo   # replay a synthetic dispatch day
-pytest tests/test_worker_idempotency.py   # worker correctness under SQS redelivery
-make query   # daily ETA accuracy by zone
+source env.sh
+make demo        # 2h × 10 restaurants × 20 orders/h — learn (docs/RUNBOOK.md)
+make demo-full   # full synthetic dispatch day (24×100×200)
+pytest tests/test_worker_idempotency.py
+make query
 ```
 
 ## What this is NOT
@@ -82,4 +85,4 @@ Not an "Uber ETA clone" tutorial. What sets it apart: late-event handling, measu
 
 ## Build it yourself
 
-See [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md).
+See [`docs/RUNBOOK.md`](docs/RUNBOOK.md) to run the flow, or [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md) to build from scratch.
