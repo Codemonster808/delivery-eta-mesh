@@ -60,6 +60,7 @@ The scoring worker is a stateless, high-throughput SQS consumer where a warm JVM
 | S3 / SNS / SQS / DynamoDB | [MiniStack](https://ministack.org) (free, MIT, no account) | AWS | High |
 | AWS CLI v2 | Real `aws` CLI against MiniStack (`AWS_ENDPOINT_URL`) — see `docs/RUNBOOK.md` §2. Note: this repo doesn't use Lambda or Step Functions, unlike the other 4 | AWS CLI v2 | High |
 | ECS / Fargate | MiniStack ECS — **launches the Spring Boot worker as a real Docker container from the actual task definition** | AWS Fargate | Medium-High — same task def, no real autoscaling |
+| ECR | MiniStack — `make deploy-ecs` builds the worker image, pushes it to a real ECR repo (`docker push localhost:4566/eta-worker`), then resolves `ecs/task-definition.json.template`'s image reference before registering the task. Verified live: MiniStack's registry is reachable at two different hostnames depending on caller (`localhost:4566` from the host, `ministack:4566` from inside another container) and resolves both to the same image | Amazon ECR | High — `describe-images` reflects the real pushed digest, the ECS task genuinely pulls it |
 | EC2 | MiniStack EC2 (API only) + simulator daemon as a compose service | EC2 | Low — API only; user-data script shipped for reference |
 | Redshift | **DuckDB**, reading aggregate Parquet directly from S3 | Redshift Serverless | Medium — no MPP distribution; real DDL in `sql/redshift/` |
 

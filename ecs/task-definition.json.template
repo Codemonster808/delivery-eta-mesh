@@ -3,7 +3,7 @@
   "containerDefinitions": [
     {
       "name": "eta-worker",
-      "image": "eta-worker:latest",
+      "image": "{{ECR_IMAGE_URI}}",
       "memory": 512,
       "essential": true,
       "environment": [

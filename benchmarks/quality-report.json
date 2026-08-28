@@ -1,6 +1,6 @@
 {
   "pipeline": "delivery-eta-mesh",
-  "generated_at": "2026-08-25T16:31:15.439002+00:00",
+  "generated_at": "2026-08-28T21:04:57.284968+00:00",
   "score": {
     "completeness": 1.0,
     "correctness": 1.0,
@@ -37,15 +37,15 @@
     {
       "dimension": "validity",
       "name": "salting_reduces_partition_imbalance",
-      "measured": 9.67,
+      "measured": 12.67,
       "threshold": 77.0,
       "passed": true,
-      "detail": "naive imbalance=77.0, salted imbalance=9.67"
+      "detail": "naive imbalance=77.0, salted imbalance=12.67"
     },
     {
       "dimension": "timeliness",
       "name": "worker_scores_orders_promptly",
-      "measured": 5.0,
+      "measured": 10.1,
       "threshold": 20.0,
       "passed": true,
       "detail": "100 orders scored"
@@ -53,7 +53,7 @@
     {
       "dimension": "timeliness",
       "name": "replay_job_under_sla",
-      "measured": 31.3,
+      "measured": 41.1,
       "threshold": 180.0,
       "passed": true,
       "detail": "PySpark watermark + salting job wall time"

@@ -4,7 +4,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=s3,sns,sqs,dynamodb,ec2,ecs
+      - SERVICES=s3,sns,sqs,dynamodb,ec2,ecs,ecr
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"   # ECS launches real containers for the worker task
     healthcheck:

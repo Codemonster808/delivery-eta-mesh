@@ -87,6 +87,10 @@ aws dynamodb scan --table-name eta-current --max-items 5
 aws ecs list-clusters
 aws ecs list-tasks --cluster eta-cluster
 aws ecs describe-tasks --cluster eta-cluster --tasks $(aws ecs list-tasks --cluster eta-cluster --query 'taskArns[0]' --output text)
+
+# ECR — la imagen que la task realmente corrió, no una imagen local "adivinada"
+aws ecr describe-repositories --query 'repositories[*].repositoryName'
+aws ecr describe-images --repository-name eta-worker --query 'imageDetails[*].[imageTags[0],imagePushedAt]'
 ```
 
 **Qué mirar que `aws_inspect.py` no te muestra:** `ApproximateNumberOfMessagesNotVisible` en la cola mientras el worker procesa un batch (mensajes "en vuelo", no perdidos), y el `lastStatus` real de una task ECS (`PROVISIONING` → `RUNNING` → `STOPPED`) si corriste `make deploy-ecs`.
@@ -154,7 +158,16 @@ Todos son `order_placed` — nunca `courier_gps`. `src/publisher.py` filtra ante
 
 <details><summary>Verificar</summary>
 
-La task ECS pasa por `PROVISIONING` → `PENDING` → `RUNNING` con un `startedAt` real, mientras que `java -jar` local no tiene ese ciclo de vida — arranca y ya. Esa diferencia es exactamente por qué el README distingue el "learn path" (`java -jar`, más rápido de iterar) del "path contenedor real" (`make deploy-ecs`, más fiel a producción pero más lento de ciclar).
+La task ECS pasa por `PROVISIONING` → `PENDING` → `RUNNING` con un `startedAt` real, mientras que `java -jar` local no tiene ese ciclo de vida — arranca y ya. Esa diferencia es exactamente por qué el README distingue el "learn path" (`java -jar`, más rápido de iterar) del "path contenedor real" (`make deploy-ecs`, más fiel a producción pero más lento de ciclar). Desde que `deploy-ecs` empuja a ECR de verdad (ver ejercicio 4), la task también pasa por un pull real de imagen, no un tag local que "ya estaba ahí".
+</details>
+
+**4. Confirma que la task corrió la imagen que tú empujaste, no una imagen local con el mismo nombre**
+
+Después de `make deploy-ecs`: `aws ecr describe-images --repository-name eta-worker` (anota el `imageDigest`), y compáralo contra `docker inspect eta-worker:latest --format '{{"{{"}}.Id{{"}}"}}'` en tu máquina.
+
+<details><summary>Verificar</summary>
+
+`src/deploy_ecs.py` empuja con `docker push localhost:4566/eta-worker:latest` (el host donde corre `docker`), pero el `task-definition.json.template` referencia `ministack:4566/eta-worker:latest` (el alias de red que ve la task, un contenedor separado con su propio namespace de red) — dos hostnames distintos para el mismo repo. Verificado en vivo: MiniStack resuelve ambos al mismo backend de imágenes, así que el pull funciona sin credenciales adicionales. Si alguna vez cambias `PUSH_HOST`/`PULL_HOST` en `deploy_ecs.py` y usas el mismo hostname para ambos, la task falla a pull porque `ministack` no es resoluble desde el host y `localhost` no es resoluble desde dentro del contenedor de la task — son namespaces de red distintos, no el mismo "localhost" con otro nombre.
 </details>
 
 ---
