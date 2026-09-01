@@ -1,0 +1,30 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "data", "benchmarks", "src/worker"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+exclude = ["^src/worker/", "^\\.venv/", "^data/", "^benchmarks/"]
+
+[[tool.mypy.overrides]]
+module = ["src.transformation.*", "src.utils.*"]
+disallow_untyped_defs = true
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/worker/*"]
+
+[tool.coverage.report]
+fail_under = 5
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

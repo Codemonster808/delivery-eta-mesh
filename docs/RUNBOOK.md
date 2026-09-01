@@ -27,7 +27,7 @@ python3 scripts/aws_inspect.py all
 ### 1.1 Generar el día sintético
 
 ```bash
-python3 src/data_gen.py --hours 2 --restaurants 10 --orders-per-hour 20 --out data/events.jsonl --seed 42
+python3 src/ingestion/data_gen.py --hours 2 --restaurants 10 --orders-per-hour 20 --out data/events.jsonl --seed 42
 python3 -c "import json; from collections import Counter; c=Counter(json.loads(l)['event_type'] for l in open('data/events.jsonl')); print(c)"
 ```
 
@@ -47,7 +47,7 @@ java -jar src/worker/target/eta-worker-0.0.1-SNAPSHOT.jar
 
 ```bash
 source env.sh
-python3 src/publisher.py --in data/events.jsonl
+python3 src/ingestion/publisher.py --in data/events.jsonl
 sleep 8
 python3 scripts/aws_inspect.py sqs
 python3 scripts/aws_inspect.py ddb
@@ -60,8 +60,8 @@ Atajo con cleanup: `make demo` (usa `run_with_bg.sh`; ya no deja el Java colgado
 ### 1.3 Replay Spark (watermark + salt de skew)
 
 ```bash
-python3 src/replay.py --in data/events.jsonl
-python3 src/accuracy.py --events data/events.jsonl
+python3 src/transformation/replay.py --in data/events.jsonl
+python3 scripts/accuracy.py --events data/events.jsonl --write   # also persists ETA accuracy by zone/hour to s3://dispatch-agg/eta_accuracy/
 make query
 ```
 
@@ -104,7 +104,7 @@ aws ecr describe-images --repository-name eta-worker --query 'imageDetails[*].[i
 Sin Terminal A:
 
 ```bash
-python3 src/publisher.py --in data/events.jsonl
+python3 src/ingestion/publisher.py --in data/events.jsonl
 python3 scripts/aws_inspect.py sqs
 ```
 
@@ -126,7 +126,7 @@ lsof -ti:8080 | xargs -r kill
 |---|---|
 | `QueueDoesNotExist` | Falta `source env.sh` o bootstrap |
 | Worker no llega a `/health` | Jar no compilado (`mvn package`) o MiniStack abajo (el worker habla SQS al arrancar) |
-| MAE no existe | No corriste `src/accuracy.py` |
+| MAE no existe | No corriste `scripts/accuracy.py` |
 | ECS/Fargate | `make deploy-ecs` es el path “contenedor real”; el learn path usa `java -jar` local, más fácil de ver |
 | Step Functions / Lambda dan `Unsupported service` | Correcto: P4 no los usa. `docker-compose.yml` solo habilita `s3,sns,sqs,dynamodb,ec2,ecs`. |
 
@@ -149,7 +149,7 @@ Vas a ver `ApproximateNumberOfMessages` bajar mientras `ApproximateNumberOfMessa
 
 <details><summary>Verificar</summary>
 
-Todos son `order_placed` — nunca `courier_gps`. `src/publisher.py` filtra antes de mandar a SNS; los eventos GPS solo los consume `src/replay.py` directo del `.jsonl`, nunca pasan por la cola. Es una decisión de diseño real: no todo evento necesita ir por streaming, algunos solo alimentan un batch job.
+Todos son `order_placed` — nunca `courier_gps`. `src/ingestion/publisher.py` filtra antes de mandar a SNS; los eventos GPS solo los consume `src/transformation/replay.py` directo del `.jsonl`, nunca pasan por la cola. Es una decisión de diseño real: no todo evento necesita ir por streaming, algunos solo alimentan un batch job.
 </details>
 
 **3. Corre el path de contenedor real y compáralo contra `java -jar` local**
@@ -167,7 +167,7 @@ Después de `make deploy-ecs`: `aws ecr describe-images --repository-name eta-wo
 
 <details><summary>Verificar</summary>
 
-`src/deploy_ecs.py` empuja con `docker push localhost:4566/eta-worker:latest` (el host donde corre `docker`), pero el `task-definition.json.template` referencia `ministack:4566/eta-worker:latest` (el alias de red que ve la task, un contenedor separado con su propio namespace de red) — dos hostnames distintos para el mismo repo. Verificado en vivo: MiniStack resuelve ambos al mismo backend de imágenes, así que el pull funciona sin credenciales adicionales. Si alguna vez cambias `PUSH_HOST`/`PULL_HOST` en `deploy_ecs.py` y usas el mismo hostname para ambos, la task falla a pull porque `ministack` no es resoluble desde el host y `localhost` no es resoluble desde dentro del contenedor de la task — son namespaces de red distintos, no el mismo "localhost" con otro nombre.
+`src/orchestration/deploy_ecs.py` empuja con `docker push localhost:4566/eta-worker:latest` (el host donde corre `docker`), pero el `task-definition.json.template` referencia `ministack:4566/eta-worker:latest` (el alias de red que ve la task, un contenedor separado con su propio namespace de red) — dos hostnames distintos para el mismo repo. Verificado en vivo: MiniStack resuelve ambos al mismo backend de imágenes, así que el pull funciona sin credenciales adicionales. Si alguna vez cambias `PUSH_HOST`/`PULL_HOST` en `deploy_ecs.py` y usas el mismo hostname para ambos, la task falla a pull porque `ministack` no es resoluble desde el host y `localhost` no es resoluble desde dentro del contenedor de la task — son namespaces de red distintos, no el mismo "localhost" con otro nombre.
 </details>
 
 ---

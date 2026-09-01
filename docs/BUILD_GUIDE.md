@@ -36,7 +36,7 @@ make check-env
 Generate a synthetic dispatch day: orders, courier GPS pings (some deliberately 5-15 minutes late), with a skewed restaurant distribution (5% of restaurant IDs generate 60% of orders).
 
 ```bash
-python3 src/data_gen.py --hours 24 --out data/events.jsonl
+python3 src/ingestion/data_gen.py --hours 24 --out data/events.jsonl
 make check-data   # "OK: skew confirmed (top 5% restaurants = ~60% of events), 12% events marked late"
 ```
 
@@ -57,13 +57,13 @@ make check-worker   # replays 1000 events, asserts a DynamoDB ETA row exists for
 ## 4. Build the FastAPI live layer (1-2 h) → checkpoint: `make check-api`
 
 ```bash
-uvicorn src.api:app --reload
+uvicorn src.serving.api:app --reload
 curl localhost:8000/eta/order_123
 ```
 
 ## 5. Build the nightly Spark replay + watermarking (4-5 h) → checkpoint: `make check-watermark`
 
-Write `src/replay.py`: read the full day, apply a watermark (events arriving >10 min after their window closes are marked `late_correction` instead of updating the live row), and reconcile the final daily accuracy numbers.
+Write `src/transformation/replay.py`: read the full day, apply a watermark (events arriving >10 min after their window closes are marked `late_correction` instead of updating the live row), and reconcile the final daily accuracy numbers.
 
 ```bash
 make check-watermark   # asserts late events are captured in a separate correction table, not silently merged
@@ -82,7 +82,7 @@ make check-skew   # measured speedup must be documented in benchmarks/skew_befor
 Run the same 10M-event synthetic workload through the Fargate worker path and a Lambda-based equivalent (a simplified handler). Compute $/million events for each using published AWS pricing.
 
 ```bash
-python3 src/cost_compare.py --events 10000000 --out docs/cost-comparison.md
+python3 scripts/cost_compare.py --events 10000000 --out docs/cost-comparison.md
 ```
 
 ## 8. Measure, model, ship (3 h)

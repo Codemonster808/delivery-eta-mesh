@@ -1,5 +1,9 @@
 # delivery-eta-mesh
 
+[![CI](https://github.com/Codemonster808/delivery-eta-mesh/actions/workflows/ci.yml/badge.svg)](https://github.com/Codemonster808/delivery-eta-mesh/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-9%25-yellow)](https://github.com/Codemonster808/delivery-eta-mesh/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 An event-driven ETA recomputation mesh for food delivery dispatch — a Spring Boot scoring worker on Fargate, with late-event handling and Spark skew handling for hot restaurants.
 
 ## Pitch Card
@@ -22,7 +26,7 @@ courier GPS simulator (EC2, long-running daemon) + order events
   → Spring Boot worker on Fargate: consume batch → compute ETA → DynamoDB (current ETA)
   → all raw events → S3 (partitioned)
   → nightly PySpark: replay full day, handle late arrivals via watermark, salt hot restaurant keys
-  → aggregates → Redshift (ETA accuracy by zone/hour)
+  → aggregates → s3://dispatch-agg/ (order_counts via Spark; ETA accuracy by zone/hour via scripts/accuracy.py --write), queried through DuckDB (this repo's Redshift stand-in, see docs/architecture.md)
   → FastAPI: /eta/{order_id} live, /accuracy/daily
 ```
 
@@ -38,10 +42,10 @@ The scoring worker is a stateless, high-throughput SQS consumer where a warm JVM
 
 | Metric | Value | How it's measured |
 |---|---|---|
-| Skew concentration (top 5% of restaurants) | **59.5%** of all orders, on a 24h/100-restaurant/9,600-event synthetic run | `python3 src/data_gen.py` |
-| Partition imbalance, naive shuffle by `restaurant_id` | **11.52x** (max 1,440 rows vs. min 125 rows per partition) | `python3 src/replay.py` |
-| Partition imbalance, salted shuffle by `(restaurant_id, salt)` | **1.7x** (max 839 vs. min 494) | `python3 src/replay.py` |
-| Late GPS pings watermarked (not merged into live state) | 545 of 4,800 GPS events (11.4%) | `python3 src/replay.py` |
+| Skew concentration (top 5% of restaurants) | **59.5%** of all orders, on a 24h/100-restaurant/9,600-event synthetic run | `python3 src/ingestion/data_gen.py` |
+| Partition imbalance, naive shuffle by `restaurant_id` | **11.52x** (max 1,440 rows vs. min 125 rows per partition) | `python3 src/transformation/replay.py` |
+| Partition imbalance, salted shuffle by `(restaurant_id, salt)` | **1.7x** (max 839 vs. min 494) | `python3 src/transformation/replay.py` |
+| Late GPS pings watermarked (not merged into live state) | 545 of 4,800 GPS events (11.4%) | `python3 src/transformation/replay.py` |
 | Worker end-to-end: orders sent → rows scored in DynamoDB | **5/5**, real SQS → real Spring Boot worker → real DynamoDB | manual verification, see BUILD_GUIDE step 3 |
 | Redelivery of the same `order_id` | **1 row**, not a duplicate — later message's ETA wins | manual verification |
 
@@ -62,7 +66,7 @@ The scoring worker is a stateless, high-throughput SQS consumer where a warm JVM
 | ECS / Fargate | MiniStack ECS — **launches the Spring Boot worker as a real Docker container from the actual task definition** | AWS Fargate | Medium-High — same task def, no real autoscaling |
 | ECR | MiniStack — `make deploy-ecs` builds the worker image, pushes it to a real ECR repo (`docker push localhost:4566/eta-worker`), then resolves `ecs/task-definition.json.template`'s image reference before registering the task. Verified live: MiniStack's registry is reachable at two different hostnames depending on caller (`localhost:4566` from the host, `ministack:4566` from inside another container) and resolves both to the same image | Amazon ECR | High — `describe-images` reflects the real pushed digest, the ECS task genuinely pulls it |
 | EC2 | MiniStack EC2 (API only) + simulator daemon as a compose service | EC2 | Low — API only; user-data script shipped for reference |
-| Redshift | **DuckDB**, reading aggregate Parquet directly from S3 | Redshift Serverless | Medium — no MPP distribution; real DDL in `sql/redshift/` |
+| Redshift | **DuckDB**, reading aggregate Parquet directly from S3 | Redshift Serverless | Medium — no MPP distribution; no `sql/redshift/` DDL exists in this repo (see `src/utils/warehouse.py`'s docstring) |
 
 ## Three non-tutorial challenges
 
@@ -76,7 +80,7 @@ The scoring worker is a stateless, high-throughput SQS consumer where a warm JVM
 source env.sh
 make demo        # 2h × 10 restaurants × 20 orders/h — learn (docs/RUNBOOK.md)
 make demo-full   # full synthetic dispatch day (24×100×200)
-pytest tests/test_worker_idempotency.py
+pytest tests/integration/test_worker_idempotency.py   # redelivery-does-not-duplicate check, standalone
 make query
 ```
 
