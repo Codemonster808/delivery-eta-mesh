@@ -19,7 +19,7 @@ distlib==0.4.3
 duckdb==1.5.5
 fastapi==0.141.1
 filelock==3.32.5
-gherkin-official==29.0.0
+gherkin-official==42.0.1
 h11==0.16.0
 identify==2.6.19
 idna==3.19
