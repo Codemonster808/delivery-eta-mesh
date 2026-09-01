@@ -167,7 +167,7 @@ Después de `make deploy-ecs`: `aws ecr describe-images --repository-name eta-wo
 
 <details><summary>Verificar</summary>
 
-`src/orchestration/deploy_ecs.py` empuja con `docker push localhost:4566/eta-worker:latest` (el host donde corre `docker`), pero el `task-definition.json.template` referencia `ministack:4566/eta-worker:latest` (el alias de red que ve la task, un contenedor separado con su propio namespace de red) — dos hostnames distintos para el mismo repo. Verificado en vivo: MiniStack resuelve ambos al mismo backend de imágenes, así que el pull funciona sin credenciales adicionales. Si alguna vez cambias `PUSH_HOST`/`PULL_HOST` en `deploy_ecs.py` y usas el mismo hostname para ambos, la task falla a pull porque `ministack` no es resoluble desde el host y `localhost` no es resoluble desde dentro del contenedor de la task — son namespaces de red distintos, no el mismo "localhost" con otro nombre.
+`src/orchestration/deploy_ecs.py` empuja con `docker push localhost:4584/eta-worker:latest` (el host donde corre `docker`), pero el `task-definition.json.template` referencia `ministack:4566/eta-worker:latest` (el alias de red que ve la task, un contenedor separado con su propio namespace de red) — dos hostnames distintos para el mismo repo. Verificado en vivo: MiniStack resuelve ambos al mismo backend de imágenes, así que el pull funciona sin credenciales adicionales. Si alguna vez cambias `PUSH_HOST`/`PULL_HOST` en `deploy_ecs.py` y usas el mismo hostname para ambos, la task falla a pull porque `ministack` no es resoluble desde el host y `localhost` no es resoluble desde dentro del contenedor de la task — son namespaces de red distintos, no el mismo "localhost" con otro nombre.
 </details>
 
 ---
