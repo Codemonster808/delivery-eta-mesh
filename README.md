@@ -21,17 +21,47 @@ An event-driven ETA recomputation mesh for food delivery dispatch — a Spring B
 ## Architecture
 
 ```
-src/ingestion/data_gen.py (order + courier GPS events, EC2-daemon equivalent)
-  → src/ingestion/publisher.py → SNS `dispatch-events` → SQS (scoring queue + DLQ)
-  → src/worker/.../EtaScoringWorker.java (Spring Boot on Fargate):
-      consume batch → compute ETA → DynamoDB (current ETA)
-  → all raw events → S3 (partitioned)
-  → nightly src/transformation/replay.py (PySpark): replay full day, handle
-    late arrivals via watermark, salt hot restaurant keys
-  → aggregates → s3://dispatch-agg/ (order_counts via Spark; ETA accuracy by
-    zone/hour via scripts/accuracy.py --write), queried through
-    src/utils/warehouse.py :: DuckDB (this repo's Redshift stand-in, see docs/architecture.md)
-  → src/serving/api.py :: FastAPI: /eta/{order_id} live, /accuracy/daily
+  src/ingestion/data_gen.py
+    order events + courier GPS pings (EC2-daemon equivalent)
+             |
+             v
+  src/ingestion/publisher.py
+             |
+             v
+        SNS dispatch-events
+             |
+             v
+   SQS scoring queue  (+ DLQ on failure)
+             |
+             v
+  src/worker/.../EtaScoringWorker.java (Spring Boot on Fargate)
+    consume batch --> compute ETA
+             |
+             v
+   DynamoDB eta-current
+   (worker only ever writes the CURRENT eta — history
+    correction happens only in the nightly replay below)
+
+  all raw events also land in --> S3 (partitioned)
+             |
+             v
+  nightly src/transformation/replay.py (PySpark)
+    watermark late GPS arrivals, salt hot restaurant keys
+             |
+        +----+----+
+        v         v
+  S3 dispatch-agg/   scripts/accuracy.py --write
+  order_counts       --> S3 dispatch-agg/eta_accuracy
+        |                 |
+        +--------+--------+
+                 v
+     src/utils/warehouse.py :: DuckDB
+       (Redshift stand-in, offline/warehouse queries only)
+
+  src/serving/api.py :: FastAPI
+    /eta/{order_id}   reads eta-current live
+    /accuracy/daily   computes MAE live from eta-current + events
+                       (not the persisted aggregate)
 ```
 
 See `docs/architecture.md` for the diagram.
