@@ -108,7 +108,16 @@ The scoring worker is a stateless, high-throughput SQS consumer where a warm JVM
 2. **Spark skew** — the top 5% of restaurants generate ~60% of events; key-salting with a measured before/after speedup.
 3. **Real cost comparison** — the same workload on Fargate vs. Lambda, with a $/million-events table and the volume at which the cost curve crosses.
 
-## Demo (3 minutes)
+## Installation
+
+```bash
+git clone https://github.com/Codemonster808/delivery-eta-mesh.git
+cd delivery-eta-mesh
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt   # app deps + lint/type/security tooling
+```
+
+## Usage — Demo (3 minutes)
 
 ```bash
 source env.sh
