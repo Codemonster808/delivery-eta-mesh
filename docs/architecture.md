@@ -1,5 +1,52 @@
 # Architecture
 
+## ASCII — execution flow
+
+```
+  src/ingestion/data_gen.py
+    order events + courier GPS pings (EC2-daemon equivalent)
+             |
+             v
+  src/ingestion/publisher.py
+             |
+             v
+        SNS dispatch-events
+             |
+             v
+   SQS scoring queue  (+ DLQ on failure)
+             |
+             v
+  src/worker/.../EtaScoringWorker.java (Spring Boot on Fargate)
+    consume batch --> compute ETA
+             |
+             v
+   DynamoDB eta-current   (worker only ever writes the CURRENT eta —
+             |              history correction happens only below)
+             |
+             |         all raw events also land in --> S3 (partitioned)
+             |                                              |
+             |                                              v
+             |                              nightly src/transformation/replay.py (PySpark)
+             |                                watermark late GPS arrivals,
+             |                                salt hot restaurant keys
+             |                                              |
+             |                                +-------------+-------------+
+             |                                v                           v
+             |                    S3 dispatch-agg/order_counts   scripts/accuracy.py --write
+             |                    (src/transformation/replay.py)   --> S3 dispatch-agg/eta_accuracy
+             |                                |                           |
+             |                                +-------------+-------------+
+             |                                              v
+             |                          src/utils/warehouse.py :: DuckDB
+             |                            (Redshift stand-in, offline/warehouse queries only)
+             v
+  src/serving/api.py :: FastAPI
+    /eta/{order_id}   (reads eta-current live)
+    /accuracy/daily   (computes MAE live from eta-current + events, not the persisted aggregate)
+```
+
+## Mermaid (same flow)
+
 ```mermaid
 flowchart LR
     SIM[EC2: courier GPS simulator\nlong-running daemon] --> SNS[SNS: dispatch-events]
