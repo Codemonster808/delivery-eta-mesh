@@ -127,6 +127,16 @@ pytest tests/integration/test_worker_idempotency.py   # redelivery-does-not-dupl
 make query
 ```
 
+## Testing
+
+```bash
+make test                     # Python (unit + integration + BDD) + Java mvn test, against real MiniStack
+make e2e                      # full pipeline, emits benchmarks/quality-report.json
+.venv/bin/pre-commit run --all-files   # ruff, mypy, whitespace/EOF checks
+```
+
+CI (`.github/workflows/ci.yml`) runs the same suite on every push, plus an isolated `security` job (`pip-audit` and a Trivy filesystem scan of the Java worker's dependency tree — see `docs/adr/0004-maven-dependency-scanning.md`) and a coverage gate that fails the build under the threshold on the badge above.
+
 ## What this is NOT
 
 Not an "Uber ETA clone" tutorial. What sets it apart: late-event handling, measured skew mitigation, and an explicit cost comparison — not just a happy-path prediction demo.
@@ -134,3 +144,11 @@ Not an "Uber ETA clone" tutorial. What sets it apart: late-event handling, measu
 ## Build it yourself
 
 See [`docs/RUNBOOK.md`](docs/RUNBOOK.md) to run the flow, or [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md) to build from scratch.
+
+## Contributing
+
+Solo-maintained portfolio/demo repo — not actively seeking external contributions, but issues and questions are welcome via [GitHub Issues](https://github.com/Codemonster808/delivery-eta-mesh/issues). See [`CODEOWNERS`](CODEOWNERS) and [`SECURITY.md`](SECURITY.md) for how reports are handled.
+
+## License
+
+[MIT](LICENSE) © Codemonster808
