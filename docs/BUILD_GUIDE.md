@@ -15,7 +15,7 @@ docker --version   # native Docker Engine, not Docker Desktop
 python3 --version  # 3.12+
 java --version      # 17 (Spring Boot 3.4 target)
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # app deps + lint/type/security tooling
 ```
 
 ```bash
