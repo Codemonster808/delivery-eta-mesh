@@ -21,13 +21,17 @@ An event-driven ETA recomputation mesh for food delivery dispatch — a Spring B
 ## Architecture
 
 ```
-courier GPS simulator (EC2, long-running daemon) + order events
-  → SNS `dispatch-events` → SQS (scoring queue + DLQ)
-  → Spring Boot worker on Fargate: consume batch → compute ETA → DynamoDB (current ETA)
+src/ingestion/data_gen.py (order + courier GPS events, EC2-daemon equivalent)
+  → src/ingestion/publisher.py → SNS `dispatch-events` → SQS (scoring queue + DLQ)
+  → src/worker/.../EtaScoringWorker.java (Spring Boot on Fargate):
+      consume batch → compute ETA → DynamoDB (current ETA)
   → all raw events → S3 (partitioned)
-  → nightly PySpark: replay full day, handle late arrivals via watermark, salt hot restaurant keys
-  → aggregates → s3://dispatch-agg/ (order_counts via Spark; ETA accuracy by zone/hour via scripts/accuracy.py --write), queried through DuckDB (this repo's Redshift stand-in, see docs/architecture.md)
-  → FastAPI: /eta/{order_id} live, /accuracy/daily
+  → nightly src/transformation/replay.py (PySpark): replay full day, handle
+    late arrivals via watermark, salt hot restaurant keys
+  → aggregates → s3://dispatch-agg/ (order_counts via Spark; ETA accuracy by
+    zone/hour via scripts/accuracy.py --write), queried through
+    src/utils/warehouse.py :: DuckDB (this repo's Redshift stand-in, see docs/architecture.md)
+  → src/serving/api.py :: FastAPI: /eta/{order_id} live, /accuracy/daily
 ```
 
 See `docs/architecture.md` for the diagram.
