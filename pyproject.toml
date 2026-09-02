@@ -22,7 +22,7 @@ source = ["src"]
 omit = ["src/worker/*"]
 
 [tool.coverage.report]
-fail_under = 5
+fail_under = 42
 show_missing = true
 exclude_lines = [
     "pragma: no cover",

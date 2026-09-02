@@ -15,14 +15,18 @@ before ECR was wired in).
 
 Two different hostnames are involved, and mixing them up silently
 breaks the push or the pull:
-  - `localhost:4566` — reachable from the HOST, used for `docker push`
-    (this process runs on the host, building/tagging/pushing).
+  - the HOST-side address (`localhost:$MINISTACK_PORT`, 4584 in this repo)
+    — used for `docker push`, since this process runs on the host,
+    building/tagging/pushing. Read from AWS_ENDPOINT_URL, never hardcoded:
+    each portfolio repo publishes MiniStack on its own port so several can
+    run at once, so a literal :4566 would target a sibling repo's stack.
   - `ministack:4566` — the docker-compose network alias, reachable from
-    INSIDE another container. The task definition's image reference
-    (and its AWS_ENDPOINT_URL) both have to use this one, because the
-    ECS task itself is launched as a separate container with its own
+    INSIDE another container, where the port is always the container-internal
+    4566 regardless of the host mapping. The task definition's image
+    reference (and its AWS_ENDPOINT_URL) both have to use this one, because
+    the ECS task itself is launched as a separate container with its own
     network namespace — it cannot reach "localhost" and mean the host.
-Verified live: MiniStack's ECR accepts `docker push localhost:4566/<repo>:<tag>`
+Verified live: MiniStack's ECR accepts `docker push localhost:4584/<repo>:<tag>`
 directly, no `docker login` required (a real `aws ecr get-login-password`
 credential does exist but the local `docker login` step failed in this
 environment on an unrelated credential-helper issue — MiniStack's
@@ -31,6 +35,7 @@ registry endpoint didn't require it for the push to succeed anyway).
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -43,7 +48,16 @@ from utils import aws  # noqa: E402
 CLUSTER_NAME = "eta-cluster"
 REPO_NAME = "eta-worker"
 LOCAL_IMAGE = "eta-worker:latest"
-PUSH_HOST = "localhost:4566"  # reachable from the host running docker push
+# Derived from AWS_ENDPOINT_URL rather than hardcoded: this repo's MiniStack is
+# published on a non-default host port (4584) so it can run alongside the sibling
+# portfolio repos' own stacks. A hardcoded :4566 here would push the image into
+# whichever unrelated container happens to hold that port.
+PUSH_HOST = (
+    os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4584")
+    .replace("http://", "")
+    .replace("https://", "")
+    .rstrip("/")
+)  # reachable from the host running docker push
 PULL_HOST = "ministack:4566"  # reachable from inside an ECS task container
 TASK_DEF_TEMPLATE_PATH = (
     Path(__file__).resolve().parents[2] / "ecs" / "task-definition.json.template"

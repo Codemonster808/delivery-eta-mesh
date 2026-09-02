@@ -18,31 +18,40 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utils.synth import seeded_rng, skewed_choice  # noqa: E402
 
+LATE_PING_FRACTION = 0.12
+HOT_RESTAURANT_FRACTION = 0.05
+HOT_RESTAURANT_WEIGHT = 0.6
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--hours", type=int, default=24)
-    parser.add_argument("--restaurants", type=int, default=100)
-    parser.add_argument("--orders-per-hour", type=int, default=200)
-    parser.add_argument("--out", required=True)
-    parser.add_argument("--seed", type=int, default=42)
-    args = parser.parse_args()
 
-    rng = seeded_rng(args.seed)
+def generate_dispatch_day(
+    *,
+    hours: int,
+    restaurants: int,
+    orders_per_hour: int,
+    out: str | Path,
+    seed: int,
+) -> dict:
+    """Write a synthetic dispatch JSONL and return the invariants the
+    generator is supposed to produce (late-ping fraction, hot-key share).
+    """
+    rng = seeded_rng(seed)
     start = datetime(2026, 1, 1, tzinfo=UTC)
-    restaurant_ids = [f"rest_{i:04d}" for i in range(args.restaurants)]
+    restaurant_ids = [f"rest_{i:04d}" for i in range(restaurants)]
 
-    out_path = Path(args.out)
+    out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     n_events = n_late = 0
     restaurant_order_counts = {r: 0 for r in restaurant_ids}
 
     with out_path.open("w") as f:
-        for hour in range(args.hours):
-            for _ in range(args.orders_per_hour):
+        for hour in range(hours):
+            for _ in range(orders_per_hour):
                 restaurant_id = skewed_choice(
-                    rng, restaurant_ids, hot_fraction=0.05, hot_weight=0.6
+                    rng,
+                    restaurant_ids,
+                    hot_fraction=HOT_RESTAURANT_FRACTION,
+                    hot_weight=HOT_RESTAURANT_WEIGHT,
                 )
                 restaurant_order_counts[restaurant_id] += 1
                 order_id = str(uuid.uuid4())
@@ -80,7 +89,7 @@ def main() -> None:
                 # courier GPS ping — 12% arrive late (event_ts stays truthful,
                 # but the ping isn't "seen" by the pipeline until later)
                 gps_event_ts = order_ts + timedelta(minutes=rng.randint(5, 25))
-                is_late = rng.random() < 0.12
+                is_late = rng.random() < LATE_PING_FRACTION
                 arrival_delay = timedelta(minutes=rng.randint(5, 15)) if is_late else timedelta(0)
                 f.write(
                     json.dumps(
@@ -102,15 +111,42 @@ def main() -> None:
                 n_events += 1
                 n_late += int(is_late)
 
-    top5pct = sorted(restaurant_order_counts.values(), reverse=True)[
-        : max(1, args.restaurants // 20)
-    ]
+    top5pct = sorted(restaurant_order_counts.values(), reverse=True)[: max(1, restaurants // 20)]
     total_orders = sum(restaurant_order_counts.values())
     top_share = sum(top5pct) / total_orders if total_orders else 0
+    n_orders = n_events // 2
+    return {
+        "n_events": n_events,
+        "n_late": n_late,
+        "late_fraction": n_late / n_orders if n_orders else 0,
+        "top_share": top_share,
+        "total_orders": total_orders,
+        "out": str(out_path),
+    }
 
-    print(f"wrote {n_events} events ({args.hours}h, {args.restaurants} restaurants) to {out_path}")
-    print(f"  top 5% of restaurants received {top_share:.1%} of orders (target ~60%)")
-    print(f"  {n_late} GPS pings marked late ({n_late / (n_events / 2):.1%} of orders)")
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--hours", type=int, default=24)
+    parser.add_argument("--restaurants", type=int, default=100)
+    parser.add_argument("--orders-per-hour", type=int, default=200)
+    parser.add_argument("--out", required=True)
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+
+    stats = generate_dispatch_day(
+        hours=args.hours,
+        restaurants=args.restaurants,
+        orders_per_hour=args.orders_per_hour,
+        out=args.out,
+        seed=args.seed,
+    )
+    print(
+        f"wrote {stats['n_events']} events ({args.hours}h, {args.restaurants} restaurants) "
+        f"to {stats['out']}"
+    )
+    print(f"  top 5% of restaurants received {stats['top_share']:.1%} of orders (target ~60%)")
+    print(f"  {stats['n_late']} GPS pings marked late ({stats['late_fraction']:.1%} of orders)")
 
 
 if __name__ == "__main__":

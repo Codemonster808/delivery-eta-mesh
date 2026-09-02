@@ -14,7 +14,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 @Configuration
 public class AwsConfig {
 
-    @Value("${aws.endpoint-url:http://localhost:4566}")
+    @Value("${aws.endpoint-url:http://localhost:4584}")
     private String endpointUrl;
 
     @Value("${aws.region:us-east-1}")

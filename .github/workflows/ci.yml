@@ -23,7 +23,7 @@ jobs:
       - run: cd src/worker && ./mvnw -q test
       - run: cd src/worker && ./mvnw -q package -DskipTests
       - run: python3 scripts/bootstrap.py
-      - run: pytest tests/ features/ -v --ignore=tests/data_quality --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=5
+      - run: pytest tests/ features/ -v --ignore=tests/data_quality --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=42
       - uses: actions/upload-artifact@v4
         with:
           name: coverage-xml
@@ -38,6 +38,24 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: pip-audit -r requirements.txt
+      # Filesystem scan of the Maven worker. The worker's own code is tiny;
+      # the supply-chain surface is the transitive tree (~52 compile/runtime
+      # artifacts). See docs/adr/0004-maven-dependency-scanning.md.
+      # Resolve deps into ~/.m2 first: Trivy walks POMs via Maven Central and
+      # uncached scans get IP-blocked (HTTP 429) mid-tree.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - run: cd src/worker && ./mvnw -q dependency:resolve -DskipTests
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: src/worker
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: "1"
 
   e2e:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

@@ -29,7 +29,7 @@ SALT_BUCKETS = 8
 
 
 def build_spark(app_name: str = "eta-replay") -> SparkSession:
-    endpoint = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
+    endpoint = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4584")
     return (
         SparkSession.builder.appName(app_name)
         .master("local[2]")

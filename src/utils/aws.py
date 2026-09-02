@@ -10,7 +10,7 @@ from typing import Any
 
 import boto3
 
-_DEFAULT_ENDPOINT = "http://localhost:4566"
+_DEFAULT_ENDPOINT = "http://localhost:4584"
 _DEFAULT_REGION = "us-east-1"
 
 
